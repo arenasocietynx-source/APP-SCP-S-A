@@ -11,6 +11,12 @@ from datetime import datetime
 # --- IMPORTAÇÃO NOVA (CORREÇÃO DO SEU ERRO) ---
 from streamlit_gsheets import GSheetsConnection 
 
+# --- DEBUG: APAGAR DEPOIS DE FUNCIONAR ---
+st.write("🔍 O que tem nos Secrets:")
+st.json(dict(st.secrets))  # Mostra tudo o que ele leu (Cuidado, vai mostrar as senhas na tela!)
+st.stop()
+# -----------------------------------------
+
 # --- CONFIGURAÇÃO DA CONEXÃO COM GOOGLE SHEETS ---
 # O sistema vai procurar as credenciais dentro de st.secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -287,6 +293,7 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                 except:
                     # Se for a primeira vez
                     conn.update(worksheet="Dados", data=df_novo)
+
 
 
 
