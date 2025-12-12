@@ -8,6 +8,8 @@ from email.mime.base import MIMEBase
 from email import encoders
 import os
 from datetime import datetime
+# Conecta com o Google Sheets usando os segredos configurados
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- CONFIGURAÇÕES GERAIS ---
 ARQUIVO_ID = "id_controle.txt"
@@ -16,21 +18,27 @@ EMAIL_ALMOXARIFADO = "gcsconsultoriaeservicos@gmail.com"
 
 # --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL ---
 def gerar_novo_protocolo():
-    if not os.path.exists(ARQUIVO_ID):
-        with open(ARQUIVO_ID, "w") as f:
-            f.write("0") 
-            return 0
+    # Lê a aba 'Controle'
+    df_controle = conn.read(worksheet="Controle", usecols=[0], header=None)
+    
+    # Se estiver vazio ou der erro, começa do 0
+    if df_controle.empty:
+        ultimo_id = 0
     else:
-        with open(ARQUIVO_ID, "r") as f:
-            try:
-                ultimo_id = int(f.read())
-            except ValueError:
-                ultimo_id = 0
-        novo_id = ultimo_id + 1
-        with open(ARQUIVO_ID, "w") as f:
-            f.write(str(novo_id))
-        return novo_id
-
+        try:
+            ultimo_id = int(df_controle.iloc[0, 0])
+        except:
+            ultimo_id = 0
+            
+    novo_id = ultimo_id + 1
+    
+    # Atualiza o Google Sheets com o novo número
+    # Criamos um DataFrame simples com o novo número
+    df_novo = pd.DataFrame([novo_id])
+    conn.update(worksheet="Controle", data=df_novo, header=False)
+    
+    return novo_id
+    
 # --- FUNÇÃO 2: CLASSE PDF (LAYOUT PAISAGEM) ---
 class PDF(FPDF):
     def header(self):
@@ -301,25 +309,33 @@ if botao_enviar:
              )
 
         if sucesso_email:
-            st.success(f"✅ Solicitação #{protocolo_formatado} enviada com sucesso!")
-            st.balloons()
-            
-            # Salvar Histórico
-            itens_preenchidos['Protocolo'] = protocolo_formatado
-            itens_preenchidos['Data'] = data_hora
-            itens_preenchidos['Solicitante'] = solicitante
-            itens_preenchidos['Departamento'] = departamento
-            itens_preenchidos['Tipo'] = tipo_solicitacao
-            
-            colunas_ordem = [
-                'Protocolo', 'Data', 'Solicitante', 'Departamento', 'Tipo', 
-                'Descrição', 'PN/Referência', 'Fabricante', 'Unidade', 'Aplicação', 
-                'Equipamento', 'Estoque Mín', 'Estoque Máx'
-            ]
-            df_final = itens_preenchidos[colunas_ordem]
+                st.success(f"✅ Solicitação #{protocolo_formatado} enviada com sucesso!")
+                st.balloons()
+                
+                # --- NOVO CÓDIGO DE SALVAMENTO NO GOOGLE SHEETS ---
+                
+                # 1. Prepara os dados novos
+                itens_preenchidos['Protocolo'] = protocolo_formatado
+                itens_preenchidos['Data'] = data_hora
+                itens_preenchidos['Solicitante'] = solicitante
+                itens_preenchidos['Departamento'] = departamento
+                itens_preenchidos['Tipo'] = tipo_solicitacao
+                
+                colunas_ordem = [
+                    'Protocolo', 'Data', 'Solicitante', 'Departamento', 'Tipo', 
+                    'Descrição', 'PN/Referência', 'Fabricante', 'Unidade', 'Aplicação', 
+                    'Equipamento', 'Estoque Mín', 'Estoque Máx'
+                ]
+                df_novo_registro = itens_preenchidos[colunas_ordem]
 
-            if not os.path.exists(ARQUIVO_DADOS):
-                df_final.to_csv(ARQUIVO_DADOS, index=False, encoding='utf-8-sig')
-            else:
+                # 2. Lê o histórico antigo da nuvem para não perder nada
+                try:
+                    df_antigo = conn.read(worksheet="Dados")
+                    # Junta o antigo com o novo
+                    df_final = pd.concat([df_antigo, df_novo_registro], ignore_index=True)
+                except:
+                    # Se for a primeira vez e a planilha estiver vazia
+                    df_final = df_novo_registro
 
-                df_final.to_csv(ARQUIVO_DADOS, mode='a', header=False, index=False, encoding='utf-8-sig')
+                # 3. Envia tudo de volta para a nuvem
+                conn.update(worksheet="Dados", data=df_final)
