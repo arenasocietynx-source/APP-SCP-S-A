@@ -154,7 +154,7 @@ with col_logo:
         st.write("🏭") 
 
 with col_titulo:
-    st.title("Solicitação de Cadastro - GCS")
+    st.title("Solicitação de Cadastro - Sousa & Andrade")
 
 st.markdown("---")
 
@@ -273,3 +273,4 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                     conn.update(worksheet="Dados", data=df_final)
                 except:
                     conn.update(worksheet="Dados", data=df_novo)
+
