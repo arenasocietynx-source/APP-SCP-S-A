@@ -8,58 +8,44 @@ from email.mime.base import MIMEBase
 from email import encoders
 import os
 from datetime import datetime
-# --- IMPORTAÇÃO NOVA (CORREÇÃO DO SEU ERRO) ---
 from streamlit_gsheets import GSheetsConnection 
 
-# --- DEBUG: APAGAR DEPOIS DE FUNCIONAR ---
-st.write("🔍 O que tem nos Secrets:")
-st.json(dict(st.secrets))  # Mostra tudo o que ele leu (Cuidado, vai mostrar as senhas na tela!)
-st.stop()
-# -----------------------------------------
+# --- CONFIGURAÇÃO INICIAL ---
+st.set_page_config(page_title="Cadastro GCS (Cloud)", layout="wide")
 
-# --- CONFIGURAÇÃO DA CONEXÃO COM GOOGLE SHEETS ---
-# O sistema vai procurar as credenciais dentro de st.secrets
+# --- CONEXÃO COM GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Configurações de E-mail (Lendo dos Secrets para segurança)
-# Se estiver testando local e der erro de chave, verifique se seu secrets.toml está criado corretamente
-try:
-    EMAIL_CONTA = st.secrets["arenasocietynx@gmail.com"]
-    EMAIL_SENHA = st.secrets["kaic paey yqdt ckoz"]
-except:
-    # Fallback apenas para não quebrar se o usuário ainda não configurou secrets
-    EMAIL_CONTA = ""
-    EMAIL_SENHA = ""
+# --- LEITURA DAS SENHAS (SECRETS) ---
+# Como o diagnóstico confirmou que elas existem, lemos diretamente.
+if "EMAIL_CONTA" in st.secrets:
+    EMAIL_CONTA = st.secrets["EMAIL_CONTA"]
+    EMAIL_SENHA = st.secrets["EMAIL_SENHA"]
+else:
+    st.error("ERRO CRÍTICO: As senhas de e-mail não foram encontradas no Secrets.")
+    st.stop()
 
-# --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL (VIA GOOGLE SHEETS) ---
+# --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL ---
 def gerar_novo_protocolo():
-    # 1. Lê a aba 'Controle'
     try:
-        # ttl=0 garante que ele não leia memória velha
         df_controle = conn.read(worksheet="Controle", usecols=[0], ttl=0)
-        
         if df_controle.empty:
             ultimo_id = 0
         else:
-            # Tenta pegar o valor. Se tiver cabeçalho ou não, garantimos que é numérico
             valor = df_controle.iloc[0, 0]
-            # Limpeza extra caso venha como texto
             ultimo_id = int(str(valor).replace(',', '').replace('.', ''))
     except Exception:
         ultimo_id = 0
             
     novo_id = ultimo_id + 1
     
-    # 2. Atualiza a planilha com CABEÇALHO (Mais seguro)
-    # Criamos uma coluna chamada 'ULTIMO_ID' para o sistema não se perder
+    # Atualiza a planilha
     df_novo_numero = pd.DataFrame({'ULTIMO_ID': [novo_id]})
-    
-    # Atualiza a aba Controle inteira
     conn.update(worksheet="Controle", data=df_novo_numero)
     
     return novo_id
-    
-# --- FUNÇÃO 2: CLASSE PDF (LAYOUT PAISAGEM) ---
+
+# --- FUNÇÃO 2: CLASSE PDF ---
 class PDF(FPDF):
     def header(self):
         if os.path.exists('logo_esq.png'):
@@ -82,13 +68,13 @@ class PDF(FPDF):
         texto2 = "Simplificando Suprimentos, Impulsionando Negócios"
         self.cell(0, 5, texto2.encode('latin-1', 'replace').decode('latin-1'), 0, 0, 'C')
 
-# --- FUNÇÃO 3: GERAR O PDF ---
+# --- FUNÇÃO 3: GERAR ARQUIVO PDF ---
 def gerar_arquivo_pdf(protocolo, cabecalho_dados, df_itens):
     pdf = PDF(orientation='L') 
     pdf.add_page()
     pdf.set_font("Arial", size=10)
     
-    # Cabeçalho do PDF
+    # Cabeçalho
     pdf.set_fill_color(220, 220, 220)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, txt=f"Protocolo: #{protocolo}  |  Data: {cabecalho_dados['Data']}", ln=1, fill=True)
@@ -135,10 +121,6 @@ def gerar_arquivo_pdf(protocolo, cabecalho_dados, df_itens):
 
 # --- FUNÇÃO 4: ENVIO DE E-MAIL ---
 def enviar_email_com_anexo(destinatario, assunto, corpo, arquivo):
-    if not EMAIL_CONTA or not EMAIL_SENHA:
-        st.error("Configuração de e-mail não encontrada nos Secrets!")
-        return False
-
     msg = MIMEMultipart()
     msg['From'] = EMAIL_CONTA
     msg['To'] = destinatario
@@ -164,8 +146,6 @@ def enviar_email_com_anexo(destinatario, assunto, corpo, arquivo):
         return False
 
 # --- INTERFACE VISUAL ---
-st.set_page_config(page_title="Cadastro GCS (Cloud)", layout="wide")
-
 col_logo, col_titulo = st.columns([1, 6])
 with col_logo:
     if os.path.exists("logo_esq.png"):
@@ -209,7 +189,9 @@ config_colunas = {
 itens_preenchidos = st.data_editor(df_template, column_config=config_colunas, num_rows="dynamic", use_container_width=True, hide_index=True)
 
 st.markdown("---")
-# Para usar, substitua o e-mail abaixo pelo e-mail do almoxarifado
+
+# --- DEFINE QUEM RECEBE O E-MAIL ---
+# Mudei aqui para enviar para o seu próprio e-mail para você testar se chega
 EMAIL_DESTINO = "gcsconsultoriaeservicos@gmail.com" 
 
 if st.button("Validar e Enviar Solicitação", type="primary"):
@@ -226,7 +208,6 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
     for col in cols_texto:
         itens_preenchidos[col] = itens_preenchidos[col].apply(lambda x: str(x) if x is not None and str(x) != 'nan' else "")
 
-    # Validações
     if not solicitante or not departamento: erros.append("Preencha Solicitante e Departamento.")
     if itens_preenchidos.empty: erros.append("Tabela vazia.")
     if len(itens_preenchidos) > 20: erros.append("Limite de 20 itens excedido.")
@@ -248,9 +229,10 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
     if erros:
         for e in erros: st.warning(e)
     else:
-        # SUCESSO - EXECUÇÃO
-        with st.spinner("Conectando ao Google Sheets e Gerando PDF..."):
-            # 1. Gera Protocolo (Lendo da Nuvem)
+        # EXECUÇÃO DO PROCESSO
+        with st.spinner("Processando... (Conectando Google Sheets + Gerando PDF + Enviando E-mail)"):
+            
+            # 1. Gerar Protocolo
             protocolo_numero = gerar_novo_protocolo()
             protocolo_formatado = str(protocolo_numero).zfill(4)
             data_hora = datetime.now().strftime('%d/%m/%Y %H:%M')
@@ -260,10 +242,10 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                 "Tipo": tipo_solicitacao, "Data": data_hora
             }
 
-            # 2. Gera PDF
+            # 2. Gerar PDF
             arquivo_pdf = gerar_arquivo_pdf(protocolo_formatado, cabecalho, itens_preenchidos)
             
-            # 3. Envia E-mail
+            # 3. Enviar E-mail
             sucesso_email = enviar_email_com_anexo(
                 EMAIL_DESTINO, 
                 f"Solicitação #{protocolo_formatado} - {departamento}", 
@@ -275,7 +257,7 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                 st.success(f"✅ Solicitação #{protocolo_formatado} enviada com sucesso!")
                 st.balloons()
                 
-                # 4. Salva Histórico no Google Sheets (Aba 'Dados')
+                # 4. Salvar Histórico na Nuvem
                 itens_preenchidos['Protocolo'] = protocolo_formatado
                 itens_preenchidos['Data'] = data_hora
                 itens_preenchidos['Solicitante'] = solicitante
@@ -286,14 +268,8 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                 df_novo = itens_preenchidos[colunas_ordem]
 
                 try:
-                    # Lê o antigo e junta com o novo
                     df_antigo = conn.read(worksheet="Dados", ttl=0)
                     df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
                     conn.update(worksheet="Dados", data=df_final)
                 except:
-                    # Se for a primeira vez
                     conn.update(worksheet="Dados", data=df_novo)
-
-
-
-
