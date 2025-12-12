@@ -27,26 +27,32 @@ except:
 
 # --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL (VIA GOOGLE SHEETS) ---
 def gerar_novo_protocolo():
-    # 1. Lê a aba 'Controle' da planilha para ver o último número
+    # 1. Lê a aba 'Controle'
     try:
-        df_controle = conn.read(worksheet="Controle", usecols=[0], header=None, ttl=0) # ttl=0 para não usar cache
+        # ttl=0 garante que ele não leia memória velha
+        df_controle = conn.read(worksheet="Controle", usecols=[0], ttl=0)
         
         if df_controle.empty:
             ultimo_id = 0
         else:
-            # Tenta pegar o valor da célula A1
-            ultimo_id = int(df_controle.iloc[0, 0])
+            # Tenta pegar o valor. Se tiver cabeçalho ou não, garantimos que é numérico
+            valor = df_controle.iloc[0, 0]
+            # Limpeza extra caso venha como texto
+            ultimo_id = int(str(valor).replace(',', '').replace('.', ''))
     except Exception:
         ultimo_id = 0
             
     novo_id = ultimo_id + 1
     
-    # 2. Atualiza a planilha com o novo número
-    df_novo_numero = pd.DataFrame([novo_id])
-    conn.update(worksheet="Controle", data=df_novo_numero, header=False)
+    # 2. Atualiza a planilha com CABEÇALHO (Mais seguro)
+    # Criamos uma coluna chamada 'ULTIMO_ID' para o sistema não se perder
+    df_novo_numero = pd.DataFrame({'ULTIMO_ID': [novo_id]})
+    
+    # Atualiza a aba Controle inteira
+    conn.update(worksheet="Controle", data=df_novo_numero)
     
     return novo_id
-
+    
 # --- FUNÇÃO 2: CLASSE PDF (LAYOUT PAISAGEM) ---
 class PDF(FPDF):
     def header(self):
@@ -281,5 +287,6 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                 except:
                     # Se for a primeira vez
                     conn.update(worksheet="Dados", data=df_novo)
+
 
 
