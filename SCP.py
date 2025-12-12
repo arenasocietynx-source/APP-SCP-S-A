@@ -132,8 +132,9 @@ def gerar_arquivo_pdf(protocolo, cabecalho_dados, df_itens):
 
 # --- FUNÇÃO 4: ENVIO DE E-MAIL ---
 def enviar_email_com_anexo(destinatario, assunto, corpo, arquivo):
-    remetente = "arenasocietynx@gmail.com"  # <--- PREENCHER
-    senha_app = "kaic paey yqdt ckoz"     # <--- PREENCHER
+    # Lê cofre seguro do Streamlit
+    remetente = st.secrets["arenasocietynx@gmail.com"]  # <--- PREENCHER
+    senha_app = st.secrets["kaic paey yqdt ckoz"]     # <--- PREENCHER
     
     smtp_server = "smtp.gmail.com"
     smtp_port = 587
@@ -320,4 +321,5 @@ if botao_enviar:
             if not os.path.exists(ARQUIVO_DADOS):
                 df_final.to_csv(ARQUIVO_DADOS, index=False, encoding='utf-8-sig')
             else:
+
                 df_final.to_csv(ARQUIVO_DADOS, mode='a', header=False, index=False, encoding='utf-8-sig')
