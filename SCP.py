@@ -10,11 +10,6 @@ import os
 from datetime import datetime
 # --- IMPORTAÇÃO NOVA (CORREÇÃO DO SEU ERRO) ---
 from streamlit_gsheets import GSheetsConnection 
-# --- CÓDIGO TEMPORÁRIO DE TESTE ---
-st.write("📧 E-mail que o Robô está usando:", st.secrets.connections.gsheets.client_email)
-st.write("🔗 Link da Planilha:", st.secrets.connections.gsheets.spreadsheet)
-st.stop() # Para o código aqui para você ler
-# ----------------------------------
 
 # --- CONFIGURAÇÃO DA CONEXÃO COM GOOGLE SHEETS ---
 # O sistema vai procurar as credenciais dentro de st.secrets
@@ -286,4 +281,5 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                 except:
                     # Se for a primeira vez
                     conn.update(worksheet="Dados", data=df_novo)
+
 
