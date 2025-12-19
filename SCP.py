@@ -25,24 +25,27 @@ else:
     st.error("ERRO CRÍTICO: As senhas de e-mail não foram encontradas no Secrets.")
     st.stop()
 
-# --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL ---
+# --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL (COM LIMPEZA DE TEXTO) ---
 def gerar_novo_protocolo():
     try:
-        # 1. Tenta ler a aba 'Dados' onde fica o histórico
+        # 1. Lê a aba 'Dados'
         df_dados = conn.read(worksheet="Dados", ttl=0)
         
-        # Se a tabela estiver vazia ou não tiver a coluna, começa do 1
+        # Se a tabela estiver vazia, começa do 1
         if df_dados.empty or 'Protocolo' not in df_dados.columns:
             return 1
         
-        # 2. Converte a coluna Protocolo para números forçadamente
-        # 'coerce' transforma tudo que não for número (como #0none) em NaN (Vazio)
-        series_numeros = pd.to_numeric(df_dados['Protocolo'], errors='coerce')
+        # 2. LIMPEZA "FAXINA":
+        # Converte tudo para texto primeiro, remove o símbolo '#' e espaços vazios
+        coluna_limpa = df_dados['Protocolo'].astype(str).str.replace('#', '').str.strip()
         
-        # 3. Pega o maior valor ignorando os vazios/erros
-        max_valor = series_numeros.max()
+        # 3. Converte para números (o que não for número vira NaN)
+        numeros = pd.to_numeric(coluna_limpa, errors='coerce')
         
-        # Se o max_valor for NaN (significa que não achou nenhum número válido), assume 0
+        # 4. Pega o maior valor
+        max_valor = numeros.max()
+        
+        # Se não achou nenhum número válido (tudo NaN), começa do 0
         if pd.isna(max_valor):
             ultimo_id = 0
         else:
@@ -51,8 +54,7 @@ def gerar_novo_protocolo():
         return ultimo_id + 1
 
     except Exception as e:
-        # Se der qualquer erro de conexão ou leitura, retorna 1 para não travar
-        # (Idealmente você veria esse erro nos logs, mas para o usuário funciona)
+        # Em caso de erro grave, retorna 1 de segurança
         return 1
 
 # --- FUNÇÃO 2: CLASSE PDF ---
@@ -246,7 +248,7 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
             protocolo_numero = gerar_novo_protocolo()
 
             # Garante que é um número antes de formatar
-            if not protocolo_numero
+            if protocolo_numero is None:
                 protocolo_numero = 1
             
             protocolo_formatado = str(protocolo_numero).zfill(5)
@@ -290,4 +292,5 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                     conn.update(worksheet="Dados", data=df_final)
                 except:
                     conn.update(worksheet="Dados", data=df_novo)
+
 
