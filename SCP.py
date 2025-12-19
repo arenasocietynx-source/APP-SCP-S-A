@@ -25,25 +25,29 @@ else:
     st.error("ERRO CRÍTICO: As senhas de e-mail não foram encontradas no Secrets.")
     st.stop()
 
-# --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL ---
+# --- FUNÇÃO 1: PROTOCOLO INTELIGENTE (LÊ O HISTÓRICO REAL) ---
 def gerar_novo_protocolo():
     try:
-        df_controle = conn.read(worksheet="Controle", usecols=[0], ttl=0)
-        if df_controle.empty:
-            ultimo_id = 0
+        # 1. Lê a aba 'Dados' onde estão os registros reais
+        df_dados = conn.read(worksheet="Dados", ttl=0)
+        
+        # Verifica se a tabela está vazia ou sem a coluna Protocolo
+        if df_dados.empty or 'Protocolo' not in df_dados.columns:
+            novo_id = 1
         else:
-            valor = df_controle.iloc[0, 0]
-            ultimo_id = int(str(valor).replace(',', '').replace('.', ''))
-    except Exception:
-        ultimo_id = 0
+            # Tenta converter a coluna Protocolo para números (ignora erros de texto)
+            # Isso pega o maior valor (ex: 12)
+            max_valor = pd.to_numeric(df_dados['Protocolo'], errors='coerce').max()
             
-    novo_id = ultimo_id + 1
+            if pd.isna(max_valor):
+                novo_id = 1
+            else:
+                novo_id = int(max_valor) + 1
+                
+    except Exception:
+        novo_id = 1
     
-    # Atualiza a planilha
-    df_novo_numero = pd.DataFrame({'ULTIMO_ID': [novo_id]})
-    conn.update(worksheet="Controle", data=df_novo_numero)
-    
-    return novo_id
+        return novo_id
 
 # --- FUNÇÃO 2: CLASSE PDF ---
 class PDF(FPDF):
@@ -234,7 +238,7 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
             
             # 1. Gerar Protocolo
             protocolo_numero = gerar_novo_protocolo()
-            protocolo_formatado = str(protocolo_numero).zfill(4)
+            protocolo_formatado = str(protocolo_numero).zfill(5)
             data_hora = datetime.now().strftime('%d/%m/%Y %H:%M')
             
             cabecalho = {
@@ -273,4 +277,3 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                     conn.update(worksheet="Dados", data=df_final)
                 except:
                     conn.update(worksheet="Dados", data=df_novo)
-
