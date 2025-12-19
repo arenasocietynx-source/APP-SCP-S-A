@@ -25,29 +25,35 @@ else:
     st.error("ERRO CRÍTICO: As senhas de e-mail não foram encontradas no Secrets.")
     st.stop()
 
-# --- FUNÇÃO 1: PROTOCOLO INTELIGENTE (LÊ O HISTÓRICO REAL) ---
+# --- FUNÇÃO 1: PROTOCOLO SEQUENCIAL ---
 def gerar_novo_protocolo():
     try:
-        # 1. Lê a aba 'Dados' onde estão os registros reais
+        # 1. Tenta ler a aba 'Dados' onde fica o histórico
         df_dados = conn.read(worksheet="Dados", ttl=0)
         
-        # Verifica se a tabela está vazia ou sem a coluna Protocolo
+        # Se a tabela estiver vazia ou não tiver a coluna, começa do 1
         if df_dados.empty or 'Protocolo' not in df_dados.columns:
-            novo_id = 1
+            return 1
+        
+        # 2. Converte a coluna Protocolo para números forçadamente
+        # 'coerce' transforma tudo que não for número (como #0none) em NaN (Vazio)
+        series_numeros = pd.to_numeric(df_dados['Protocolo'], errors='coerce')
+        
+        # 3. Pega o maior valor ignorando os vazios/erros
+        max_valor = series_numeros.max()
+        
+        # Se o max_valor for NaN (significa que não achou nenhum número válido), assume 0
+        if pd.isna(max_valor):
+            ultimo_id = 0
         else:
-            # Tenta converter a coluna Protocolo para números (ignora erros de texto)
-            # Isso pega o maior valor (ex: 12)
-            max_valor = pd.to_numeric(df_dados['Protocolo'], errors='coerce').max()
+            ultimo_id = int(max_valor)
             
-            if pd.isna(max_valor):
-                novo_id = 1
-            else:
-                novo_id = int(max_valor) + 1
-                
-    except Exception:
-        novo_id = 1
-    
-        return novo_id
+        return ultimo_id + 1
+
+    except Exception as e:
+        # Se der qualquer erro de conexão ou leitura, retorna 1 para não travar
+        # (Idealmente você veria esse erro nos logs, mas para o usuário funciona)
+        return 1
 
 # --- FUNÇÃO 2: CLASSE PDF ---
 class PDF(FPDF):
@@ -238,7 +244,14 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
             
             # 1. Gerar Protocolo
             protocolo_numero = gerar_novo_protocolo()
+
+            # Garante que é um número antes de formatar
+            if not protocolo_numero
+                protocolo_numero = 1
+            
             protocolo_formatado = str(protocolo_numero).zfill(5)
+            # Isso garante gerar "00001", "00002", etc.
+            
             data_hora = datetime.now().strftime('%d/%m/%Y %H:%M')
             
             cabecalho = {
@@ -277,3 +290,4 @@ if st.button("Validar e Enviar Solicitação", type="primary"):
                     conn.update(worksheet="Dados", data=df_final)
                 except:
                     conn.update(worksheet="Dados", data=df_novo)
+
